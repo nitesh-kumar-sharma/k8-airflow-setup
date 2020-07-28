@@ -1,0 +1,94 @@
+# postgres - airflow-metastore
+# Definition : deployment, persistent storage, service
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: airflow-metastore
+spec:
+  type: LoadBalancer
+  ports:
+    - protocol: TCP
+      port: 5432
+      targetPort: 5432
+  selector:
+    name: airflow-metastore
+
+---
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-config
+  labels:
+    app: postgres
+data:
+  PG_DB: airflow
+  PG_USER: airflow
+  PG_PASS: airflow
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-data
+  labels:
+    app: postgres
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: standard
+  resources:
+    requests:
+      storage: 100Mi
+  volumeName: postgres-pv
+
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: postgres-pv
+  labels:
+    type: local
+spec:
+  capacity:
+    storage: 100Mi
+  storageClassName: standard
+  accessModes:
+    - ReadWriteOnce
+  hostPath:
+    path: "/d/data/postgres-pv-local"
+
+---
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: airflow-metastore
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      name: airflow-metastore
+  template:
+    metadata:
+      labels:
+        name: airflow-metastore
+    spec:
+      containers:
+        - name: airflow-metastore
+          image: nikush001/postgres:11.7
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 5432
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: postgres-config
+          volumeMounts:
+            - name: storage
+              mountPath: /var/lib/postgresql/data
+      volumes:
+        - name: storage
+          persistentVolumeClaim:
+            claimName: postgres-data
