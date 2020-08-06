@@ -5,8 +5,11 @@ apiVersion: v1
 kind: Service
 metadata:
   name: airflow-metastore
+  labels:
+    app: postgres
+  namespace: default
 spec:
-  type: LoadBalancer
+  type: ClusterIP
   ports:
     - protocol: TCP
       port: 5432
@@ -20,6 +23,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: postgres-config
+  namespace: default
   labels:
     app: postgres
 data:
@@ -32,6 +36,7 @@ apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: postgres-data
+  namespace: default
   labels:
     app: postgres
 spec:
@@ -48,8 +53,9 @@ apiVersion: v1
 kind: PersistentVolume
 metadata:
   name: postgres-pv
+  namespace: default
   labels:
-    type: local
+    app: postgres
 spec:
   capacity:
     storage: 100Mi
@@ -57,7 +63,7 @@ spec:
   accessModes:
     - ReadWriteOnce
   hostPath:
-    path: "/d/data/postgres-pv-local"
+    path: /home/kuber/airflow-mounted-vol/postgres-data
 
 ---
 
@@ -65,14 +71,16 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: airflow-metastore
+  namespace: default
 spec:
   replicas: 1
   selector:
     matchLabels:
-      name: airflow-metastore
+      app: postgres
   template:
     metadata:
       labels:
+        app: postgres
         name: airflow-metastore
     spec:
       containers:
@@ -86,9 +94,10 @@ spec:
             - configMapRef:
                 name: postgres-config
           volumeMounts:
-            - name: storage
-              mountPath: /var/lib/postgresql/data
+            - name: postgres-data
+              mountPath: /usr/local/postgresql/data/pgdata
+              subPath: pgdata
       volumes:
-        - name: storage
+        - name: postgres-data
           persistentVolumeClaim:
             claimName: postgres-data

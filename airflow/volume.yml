@@ -29,4 +29,40 @@ spec:
     - ReadWriteMany
   persistentVolumeReclaimPolicy: Retain
   hostPath:
-    path: ////d/data/airflow/dags
+    path: /home/kuber/airflow-mounted-vol/dags
+
+---
+
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: airflow-logs
+  labels:
+    env: airflow-test
+spec:
+  storageClassName: standard
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 100Mi
+  volumeName: log-pv
+
+---
+
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: log-pv
+  labels:
+    env: airflow-test
+spec:
+  storageClassName: standard
+  capacity:
+    storage: 100Mi
+  accessModes:
+    - ReadWriteMany
+  persistentVolumeReclaimPolicy: Retain
+  hostPath:
+    path: /home/kuber/airflow-mounted-vol/logs
+

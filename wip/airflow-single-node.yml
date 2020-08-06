@@ -1,15 +1,6 @@
 # postgres - airflow-single-node-cluster
 # Definition : deployment, persistent storage, service
 
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: default
-  namespace: default
-  labels:
-    env: airflow-test
-
----
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
@@ -136,16 +127,15 @@ data:
     [kubernetes]
     namespace = default
     airflow_configmap = airflow-configmap
-    worker_service_account_name = airflow
+    worker_service_account_name = default
     worker_container_image_pull_policy = Always
     worker_dags_folder = /usr/local/airflow/dags
-    worker_container_repository = airflow
+    worker_container_repository = default
     delete_worker_pods = true
     git_repo = https://github.com/nitesh-kumar-sharma/airflow-dags
-    git_branch = master
+    git_branch = airflow-dags/master
     git_subpath = simple
-    git_user = nitesh-kumar-sharma
-    git_password = 85$Lucky36$
+    git_sync_credentials_secret = git-credentials
     git_sync_root = /tmp/git
     git_dags_folder_mount_point = /usr/local/airflow/dags
     dags_volume_claim = airflow-dags
@@ -153,6 +143,10 @@ data:
     git_sync_container_repository = k8s.gcr.io/git-sync
     git_sync_container_tag = v3.0.1
     git_sync_init_container_name = git-sync-clone
+
+    [admin]
+    # ui to hide sensitive variable fields when set to true
+    hide_sensitive_variable_fields = true
 
 ---
 

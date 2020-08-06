@@ -1,0 +1,165 @@
+# postgres - airflow-single-node-cluster
+# Definition : deployment, persistent storage, service
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: default
+  namespace: default
+  labels:
+    env: airflow-test
+rules:
+  - apiGroups: [""] # "" indicates the core API group
+    resources: ["pods"]
+    verbs: ["get", "list", "watch", "create", "update", "delete"]
+  - apiGroups: ["batch", "extensions"]
+    resources: ["jobs"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: default
+  namespace: default
+  labels:
+    env: airflow-test
+subjects:
+  - kind: ServiceAccount
+    name: default # Name of the ServiceAccount
+    namespace: default
+roleRef:
+  kind: Role # This must be Role or ClusterRole
+  name: default # This must match the name of the Role or ClusterRole you wish to bind to
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: airflow
+  namespace: default
+  labels:
+    env: airflow-test
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      env: airflow-test
+  template:
+    metadata:
+      labels:
+        env: airflow-test
+    spec:
+      initContainers:
+        - name: "init"
+          image: nikush001/k8-airflow
+          imagePullPolicy: IfNotPresent
+          volumeMounts:
+            - name: airflow-configmap
+              mountPath: /usr/local/airflow/airflow.cfg
+              subPath: airflow.cfg
+            - name: airflow-dags
+              mountPath: /usr/local/airflow/dags
+          env:
+            - name: SQL_ALCHEMY_CONN
+              valueFrom:
+                secretKeyRef:
+                  name: airflow-secrets
+                  key: sql_alchemy_conn
+          command:
+            - "bash"
+          args:
+            - "-cx"
+            - "initdb.sh"
+
+      containers:
+        - name: webserver
+          image: nikush001/k8-airflow
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: NODE
+              value: "webserver"
+          envFrom:
+            - configMapRef:
+                name: airflow-configmap
+          ports:
+            - name: webserver
+              protocol: TCP
+              containerPort: 8080
+          volumeMounts:
+            - mountPath: /usr/local/airflow/dags
+              name: airflow-dags
+            - mountPath: /usr/local/airflow/airflow.cfg
+              name: airflow-configmap
+              subPath: airflow.cfg
+            - name: airflow-logs
+              mountPath: /usr/local/airflow/logs
+        - name: scheduler
+          image: nikush001/k8-airflow
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: NODE
+              value: "scheduler"
+          envFrom:
+            - configMapRef:
+                name: airflow-configmap
+          ports:
+            - name: webserver
+              protocol: TCP
+              containerPort: 8080
+          volumeMounts:
+            - mountPath: /usr/local/airflow/dags
+              name: airflow-dags
+            - mountPath: /usr/local/airflow/airflow.cfg
+              name: airflow-configmap
+              subPath: airflow.cfg
+            - name: airflow-logs
+              mountPath: /usr/local/airflow/logs
+        - name: git-sync-clone
+          image: nikush001/git-sync
+          imagePullPolicy: IfNotPresent #Always
+          envFrom:
+            - configMapRef:
+                name: gitsync-config
+            - secretRef:
+                name: git-credentials
+          volumeMounts:
+            - name: airflow-dags
+              mountPath: /tmp/git
+      volumes:
+        - name: gitsync-config
+          configMap:
+            name: gitsync-config
+        - name: airflow-configmap
+          configMap:
+            name: airflow-configmap
+        - name: git-credentials
+          secret:
+            secretName: git-credentials
+            defaultMode: 0400
+        - name: airflow-dags
+          persistentVolumeClaim:
+            claimName: airflow-dags
+        - name: airflow-logs
+          persistentVolumeClaim:
+            claimName: airflow-logs
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: airflow
+  namespace: default
+  labels:
+    env: airflow-test
+spec:
+  type: NodePort
+  ports:
+    - name: webserver
+      protocol: TCP
+      port: 8080
+      targetPort: 8080
+      nodePort: 30003
+  selector:
+    env: airflow-test
+
